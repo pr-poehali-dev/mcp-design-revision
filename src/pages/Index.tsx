@@ -5,20 +5,20 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import Icon from '@/components/ui/icon';
 import { api, Product, Order } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import ProductDialog from '@/components/ProductDialog';
+import OrderDialog from '@/components/OrderDialog';
+import ProductDetailsDialog from '@/components/ProductDetailsDialog';
+import OrderDetailsDialog from '@/components/OrderDetailsDialog';
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
 
 const COLORS = ['#2563EB', '#F97316', '#10B981', '#8B5CF6', '#6B7280'];
@@ -31,6 +31,15 @@ const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const [productDialogOpen, setProductDialogOpen] = useState(false);
+  const [orderDialogOpen, setOrderDialogOpen] = useState(false);
+  const [productDetailsOpen, setProductDetailsOpen] = useState(false);
+  const [orderDetailsOpen, setOrderDetailsOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -38,8 +47,8 @@ const Index = () => {
   const loadData = async () => {
     try {
       const [productsData, ordersData] = await Promise.all([
-        api.getProducts({ pageSize: 50 }),
-        api.getOrders({ pageSize: 10 }),
+        api.getProducts({ pageSize: 100 }),
+        api.getOrders({ pageSize: 20 }),
       ]);
       
       setProducts(productsData.products);
@@ -67,7 +76,7 @@ const Index = () => {
 
   const searchProducts = async () => {
     try {
-      const data = await api.getProducts({ search: searchQuery, pageSize: 50 });
+      const data = await api.getProducts({ search: searchQuery, pageSize: 100 });
       setProducts(data.products);
     } catch (error) {
       console.error('Error searching products:', error);
@@ -77,6 +86,56 @@ const Index = () => {
   const handleLogout = () => {
     api.logout();
     navigate('/login');
+  };
+
+  const handleEditProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setProductDialogOpen(true);
+  };
+
+  const handleViewProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setProductDetailsOpen(true);
+  };
+
+  const handleDeleteProduct = (product: Product) => {
+    setSelectedProduct(product);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedProduct) return;
+
+    try {
+      if (selectedProduct.isArchive) {
+        await api.deleteProduct(selectedProduct.id);
+        toast({
+          title: 'Товар удален',
+          description: 'Товар успешно удален из системы',
+        });
+      } else {
+        await api.archiveProduct(selectedProduct.id);
+        toast({
+          title: 'Товар архивирован',
+          description: 'Товар перемещен в архив',
+        });
+      }
+      loadData();
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка',
+        description: error instanceof Error ? error.message : 'Не удалось удалить товар',
+      });
+    } finally {
+      setDeleteDialogOpen(false);
+      setSelectedProduct(null);
+    }
+  };
+
+  const handleViewOrder = (order: Order) => {
+    setSelectedOrder(order);
+    setOrderDetailsOpen(true);
   };
 
   const getStatusColor = (product: Product) => {
@@ -244,9 +303,10 @@ const Index = () => {
             <CardContent>
               <div className="space-y-3">
                 {orders.slice(0, 5).map((order) => (
-                  <div
+                  <button
                     key={order.id}
-                    className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
+                    onClick={() => handleViewOrder(order)}
+                    className="w-full flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50 text-left"
                   >
                     <div>
                       <div className="flex items-center gap-2">
@@ -266,7 +326,7 @@ const Index = () => {
                         currency: 'RUB',
                       })}
                     </p>
-                  </div>
+                  </button>
                 ))}
               </div>
             </CardContent>
@@ -293,7 +353,7 @@ const Index = () => {
                     <CardTitle>Каталог товаров</CardTitle>
                     <CardDescription>Управление товарами на складе</CardDescription>
                   </div>
-                  <Button>
+                  <Button onClick={() => { setSelectedProduct(null); setProductDialogOpen(true); }}>
                     <Icon name="Plus" className="mr-2 h-4 w-4" />
                     Добавить товар
                   </Button>
@@ -369,11 +429,14 @@ const Index = () => {
                             </td>
                             <td className="p-4 align-middle">
                               <div className="flex gap-2">
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" onClick={() => handleViewProduct(product)}>
                                   <Icon name="Eye" className="h-4 w-4" />
                                 </Button>
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" onClick={() => handleEditProduct(product)}>
                                   <Icon name="Edit" className="h-4 w-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={() => handleDeleteProduct(product)}>
+                                  <Icon name="Trash2" className="h-4 w-4" />
                                 </Button>
                               </div>
                             </td>
@@ -395,7 +458,7 @@ const Index = () => {
                     <CardTitle>Все заказы</CardTitle>
                     <CardDescription>История заказов и операций</CardDescription>
                   </div>
-                  <Button>
+                  <Button onClick={() => setOrderDialogOpen(true)}>
                     <Icon name="Plus" className="mr-2 h-4 w-4" />
                     Создать заказ
                   </Button>
@@ -450,16 +513,9 @@ const Index = () => {
                             </Badge>
                           </td>
                           <td className="p-4 align-middle">
-                            <div className="flex gap-2">
-                              <Button variant="ghost" size="icon">
-                                <Icon name="Eye" className="h-4 w-4" />
-                              </Button>
-                              {order.status === 'Active' && (
-                                <Button variant="ghost" size="icon">
-                                  <Icon name="Check" className="h-4 w-4" />
-                                </Button>
-                              )}
-                            </div>
+                            <Button variant="ghost" size="icon" onClick={() => handleViewOrder(order)}>
+                              <Icon name="Eye" className="h-4 w-4" />
+                            </Button>
                           </td>
                         </tr>
                       ))}
@@ -471,6 +527,51 @@ const Index = () => {
           </TabsContent>
         </Tabs>
       </main>
+
+      <ProductDialog
+        open={productDialogOpen}
+        onOpenChange={setProductDialogOpen}
+        product={selectedProduct}
+        onSuccess={loadData}
+      />
+
+      <OrderDialog
+        open={orderDialogOpen}
+        onOpenChange={setOrderDialogOpen}
+        onSuccess={loadData}
+      />
+
+      <ProductDetailsDialog
+        open={productDetailsOpen}
+        onOpenChange={setProductDetailsOpen}
+        product={selectedProduct}
+      />
+
+      <OrderDetailsDialog
+        open={orderDetailsOpen}
+        onOpenChange={setOrderDetailsOpen}
+        order={selectedOrder}
+        onSuccess={loadData}
+      />
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Удалить товар?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {selectedProduct?.isArchive
+                ? 'Это действие нельзя отменить. Товар будет безвозвратно удален из системы.'
+                : 'Товар будет перемещен в архив и станет недоступен для заказов.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Отмена</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete}>
+              {selectedProduct?.isArchive ? 'Удалить' : 'Архивировать'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
