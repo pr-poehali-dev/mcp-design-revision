@@ -1,0 +1,30 @@
+{
+  "tests": [
+    {
+      "name": "Login success",
+      "method": "POST",
+      "body": {
+        "username": "admin",
+        "password": "admin123"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "access_token": "string"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Login failure",
+      "method": "POST",
+      "body": {
+        "username": "admin",
+        "password": "wrong"
+      },
+      "expectedStatus": 401,
+      "expectedBody": {
+        "error": "Invalid credentials"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

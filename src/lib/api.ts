@@ -1,4 +1,10 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+import func2url from '../../backend/func2url.json';
+
+const URLS = {
+  auth: func2url.auth,
+  products: func2url.products,
+  orders: func2url.orders,
+};
 
 class ApiClient {
   private token: string | null = null;
@@ -8,7 +14,7 @@ class ApiClient {
   }
 
   private async request<T>(
-    endpoint: string,
+    url: string,
     options: RequestInit = {}
   ): Promise<T> {
     const headers: HeadersInit = {
@@ -16,11 +22,7 @@ class ApiClient {
       ...options.headers,
     };
 
-    if (this.token) {
-      headers['Authorization'] = `Bearer ${this.token}`;
-    }
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    const response = await fetch(url, {
       ...options,
       headers,
     });
@@ -32,25 +34,25 @@ class ApiClient {
       }
       
       const error = await response.json().catch(() => ({
-        detail: 'An error occurred',
+        error: 'An error occurred',
       }));
-      throw new Error(error.detail || 'Request failed');
+      throw new Error(error.error || 'Request failed');
     }
 
     return response.json();
   }
 
   async login(username: string, password: string) {
-    const data = await this.request<{ token: string; expires: string }>(
-      '/api/auth/login',
+    const data = await this.request<{ access_token: string }>(
+      URLS.auth,
       {
         method: 'POST',
         body: JSON.stringify({ username, password }),
       }
     );
-    
-    this.token = data.token;
-    localStorage.setItem('auth_token', data.token);
+
+    this.token = data.access_token;
+    localStorage.setItem('auth_token', this.token);
     return data;
   }
 
@@ -64,133 +66,74 @@ class ApiClient {
   }
 
   async getProducts(params?: {
+    search?: string;
     page?: number;
     pageSize?: number;
-    categoryId?: number;
-    manufacturerId?: number;
-    search?: string;
-    sortBy?: string;
-    sortDirection?: 'asc' | 'desc';
-  }) {
+  }): Promise<ProductsResponse> {
     const queryParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          queryParams.append(key, value.toString());
-        }
-      });
-    }
-    
-    const query = queryParams.toString();
-    return this.request<{
-      products: Product[];
-      pagination?: PaginationMetadata;
-    }>(`/api/products${query ? `?${query}` : ''}`);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+
+    const url = `${URLS.products}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.request<ProductsResponse>(url);
   }
 
-  async getProduct(id: number) {
-    return this.request<Product>(`/api/products/${id}`);
-  }
-
-  async createProduct(data: CreateProductDto) {
-    return this.request<{ id: number }>('/api/products', {
+  async createProduct(product: CreateProductRequest): Promise<{ id: number }> {
+    return this.request<{ id: number }>(URLS.products, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(product),
     });
   }
 
-  async updateProduct(id: number, data: UpdateProductDto) {
-    return this.request<void>(`/api/products/${id}`, {
+  async updateProduct(product: UpdateProductRequest): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(URLS.products, {
       method: 'PUT',
-      body: JSON.stringify(data),
+      body: JSON.stringify(product),
     });
   }
 
-  async deleteProduct(id: number) {
-    return this.request<void>(`/api/products/${id}`, {
-      method: 'DELETE',
+  async archiveProduct(id: number): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(URLS.products, {
+      method: 'PATCH',
+      body: JSON.stringify({ id }),
     });
   }
 
-  async archiveProduct(id: number) {
-    return this.request<void>(`/api/products/${id}/archive`, {
-      method: 'PUT',
-    });
-  }
-
-  async restoreProduct(id: number) {
-    return this.request<void>(`/api/products/${id}/restore`, {
-      method: 'PUT',
-    });
+  async deleteProduct(id: number): Promise<{ success: boolean }> {
+    return this.archiveProduct(id);
   }
 
   async getOrders(params?: {
     page?: number;
     pageSize?: number;
-    status?: string;
-    fromDate?: string;
-    toDate?: string;
-    sortBy?: string;
-    sortDirection?: 'asc' | 'desc';
-  }) {
+  }): Promise<OrdersResponse> {
     const queryParams = new URLSearchParams();
-    if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined) {
-          queryParams.append(key, value.toString());
-        }
-      });
-    }
-    
-    const query = queryParams.toString();
-    return this.request<{
-      orders: Order[];
-      pagination?: PaginationMetadata;
-    }>(`/api/orders${query ? `?${query}` : ''}`);
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.pageSize) queryParams.append('pageSize', params.pageSize.toString());
+
+    const url = `${URLS.orders}${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.request<OrdersResponse>(url);
   }
 
-  async getOrder(id: number) {
-    return this.request<Order>(`/api/orders/${id}`);
-  }
-
-  async createOrder(data: CreateOrderDto) {
-    return this.request<{ id: number }>('/api/orders', {
+  async createOrder(order: CreateOrderRequest): Promise<{ id: number }> {
+    return this.request<{ id: number }>(URLS.orders, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(order),
     });
   }
 
-  async completeOrder(id: number) {
-    return this.request<void>(`/api/orders/${id}/complete`, {
-      method: 'PUT',
-    });
-  }
-
-  async cancelOrder(id: number) {
-    return this.request<void>(`/api/orders/${id}/cancel`, {
-      method: 'PUT',
-    });
-  }
-
-  async getCategories() {
-    return this.request<{ categories: Category[] }>('/api/categories');
-  }
-
-  async createCategory(data: { name: string; description?: string }) {
-    return this.request<{ id: number }>('/api/categories', {
+  async completeOrder(orderId: number): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(URLS.orders, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ action: 'complete', orderId }),
     });
   }
 
-  async getManufacturers() {
-    return this.request<{ manufacturers: Manufacturer[] }>('/api/manufacturers');
-  }
-
-  async createManufacturer(data: { name: string; description?: string }) {
-    return this.request<{ id: number }>('/api/manufacturers', {
+  async cancelOrder(orderId: number): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>(URLS.orders, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ action: 'cancel', orderId }),
     });
   }
 }
@@ -199,19 +142,15 @@ export interface Product {
   id: number;
   vendorCode: string;
   name: string;
-  manufacturerId: number;
-  manufacturerName: string;
-  categoryId: number;
-  categoryName: string;
-  typeId?: number;
-  priceType: string;
+  description: string;
   priceTypeValue: number;
   currencyCode: string;
   minStock: number;
-  description?: string;
   isArchive: boolean;
   createdOnUtc: string;
   modifiedOnUtc: string;
+  categoryName: string;
+  manufacturerName: string;
   totalQuantity: number;
   isLowStock: boolean;
   barcodes: string[];
@@ -220,23 +159,49 @@ export interface Product {
 
 export interface ProductLocation {
   locationId: number;
-  locationName: string;
   quantity: number;
+  locationName: string;
   lastUpdatedUtc: string;
+}
+
+export interface ProductsResponse {
+  products: Product[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
+export interface CreateProductRequest {
+  vendorCode: string;
+  name: string;
+  description?: string;
+  categoryId?: number;
+  categoryName?: string;
+  manufacturerId?: number;
+  manufacturerName?: string;
+  priceTypeValue: number;
+  currencyCode?: string;
+  minStock?: number;
+  barcodes?: string[];
+  locations?: { locationId: number; quantity: number }[];
+}
+
+export interface UpdateProductRequest extends CreateProductRequest {
+  id: number;
 }
 
 export interface Order {
   id: number;
-  status: string;
-  createdOnUtc: string;
-  completedOnUtc?: string;
-  outletId: number;
   username: string;
   paymentType: string;
-  comment?: string;
-  loyaltyCardNumber?: string;
-  products: OrderProduct[];
+  comment: string;
+  loyaltyCardNumber: string | null;
   totalAmount: number;
+  status: string;
+  createdOnUtc: string;
+  completedOnUtc: string | null;
+  products: OrderProduct[];
 }
 
 export interface OrderProduct {
@@ -250,50 +215,23 @@ export interface OrderProduct {
   profit: number;
 }
 
-export interface Category {
-  id: number;
-  name: string;
-  description?: string;
-}
-
-export interface Manufacturer {
-  id: number;
-  name: string;
-  description?: string;
-}
-
-export interface PaginationMetadata {
-  currentPage: number;
+export interface OrdersResponse {
+  orders: Order[];
+  total: number;
+  page: number;
   pageSize: number;
   totalPages: number;
-  totalItems: number;
-  hasNext: boolean;
-  hasPrevious: boolean;
 }
 
-export interface CreateProductDto {
-  vendorCode: string;
-  name: string;
-  manufacturerId: number;
-  categoryId: number;
-  typeId?: number;
-  priceType: string;
-  priceTypeValue: number;
-  currencyCode: string;
-  minStock: number;
-  description?: string;
-}
-
-export interface UpdateProductDto extends CreateProductDto {}
-
-export interface CreateOrderDto {
-  outletId: number;
+export interface CreateOrderRequest {
+  outletId?: number;
   username: string;
   paymentType: string;
   comment?: string;
   loyaltyCardNumber?: string;
   products: {
     productId: number;
+    productName?: string;
     quantity: number;
     unitPrice: number;
     purchasePrice: number;

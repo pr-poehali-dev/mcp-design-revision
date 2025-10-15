@@ -50,6 +50,11 @@ const Login = () => {
           <CardDescription>Войдите в систему для продолжения работы</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="mb-4 rounded-lg bg-muted p-3 text-sm">
+            <p className="font-medium mb-1">Демо-доступ:</p>
+            <p className="text-muted-foreground">Логин: <code className="bg-background px-1 rounded">admin</code></p>
+            <p className="text-muted-foreground">Пароль: <code className="bg-background px-1 rounded">admin123</code></p>
+          </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Имя пользователя</Label>

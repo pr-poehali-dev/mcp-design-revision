@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import Icon from '@/components/ui/icon';
-import { api, Product, Category, Manufacturer } from '@/lib/api';
+import { api, Product } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 interface ProductDialogProps {
@@ -18,15 +17,13 @@ interface ProductDialogProps {
 
 const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialogProps) => {
   const [loading, setLoading] = useState(false);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [manufacturers, setManufacturers] = useState<Manufacturer[]>([]);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
     vendorCode: '',
     name: '',
-    manufacturerId: '',
-    categoryId: '',
+    categoryName: 'Электроника',
+    manufacturerName: 'Общий производитель',
     priceTypeValue: '',
     currencyCode: 'RUB',
     minStock: '10',
@@ -35,13 +32,12 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
 
   useEffect(() => {
     if (open) {
-      loadReferences();
       if (product) {
         setFormData({
           vendorCode: product.vendorCode,
           name: product.name,
-          manufacturerId: product.manufacturerId.toString(),
-          categoryId: product.categoryId.toString(),
+          categoryName: product.categoryName,
+          manufacturerName: product.manufacturerName,
           priceTypeValue: product.priceTypeValue.toString(),
           currencyCode: product.currencyCode,
           minStock: product.minStock.toString(),
@@ -53,29 +49,12 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
     }
   }, [open, product]);
 
-  const loadReferences = async () => {
-    try {
-      const [categoriesData, manufacturersData] = await Promise.all([
-        api.getCategories(),
-        api.getManufacturers(),
-      ]);
-      setCategories(categoriesData.categories);
-      setManufacturers(manufacturersData.manufacturers);
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Ошибка загрузки',
-        description: 'Не удалось загрузить справочники',
-      });
-    }
-  };
-
   const resetForm = () => {
     setFormData({
       vendorCode: '',
       name: '',
-      manufacturerId: '',
-      categoryId: '',
+      categoryName: 'Электроника',
+      manufacturerName: 'Общий производитель',
       priceTypeValue: '',
       currencyCode: 'RUB',
       minStock: '10',
@@ -91,9 +70,8 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
       const data = {
         vendorCode: formData.vendorCode,
         name: formData.name,
-        manufacturerId: parseInt(formData.manufacturerId),
-        categoryId: parseInt(formData.categoryId),
-        priceType: 'Fixed',
+        categoryName: formData.categoryName,
+        manufacturerName: formData.manufacturerName,
         priceTypeValue: parseFloat(formData.priceTypeValue),
         currencyCode: formData.currencyCode,
         minStock: parseInt(formData.minStock),
@@ -101,10 +79,10 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
       };
 
       if (product) {
-        await api.updateProduct(product.id, data);
+        await api.updateProduct({ ...data, id: product.id });
         toast({
           title: 'Товар обновлен',
-          description: 'Изменения успешно сохранены',
+          description: 'Информация о товаре успешно обновлена',
         });
       } else {
         await api.createProduct(data);
@@ -119,7 +97,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'Ошибка сохранения',
+        title: product ? 'Ошибка обновления' : 'Ошибка создания',
         description: error instanceof Error ? error.message : 'Не удалось сохранить товар',
       });
     } finally {
@@ -129,11 +107,11 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>{product ? 'Редактировать товар' : 'Добавить товар'}</DialogTitle>
           <DialogDescription>
-            {product ? 'Измените информацию о товаре' : 'Заполните информацию о новом товаре'}
+            {product ? 'Измените информацию о товаре' : 'Заполните данные для создания нового товара'}
           </DialogDescription>
         </DialogHeader>
 
@@ -146,54 +124,41 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
                 value={formData.vendorCode}
                 onChange={(e) => setFormData({ ...formData, vendorCode: e.target.value })}
                 required
+                placeholder="SM-001"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="name">Название товара *</Label>
+              <Label htmlFor="name">Название *</Label>
               <Input
                 id="name"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
+                placeholder="Samsung Galaxy S24"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="categoryId">Категория *</Label>
-              <Select value={formData.categoryId} onValueChange={(value) => setFormData({ ...formData, categoryId: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите категорию" />
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map((category) => (
-                    <SelectItem key={category.id} value={category.id.toString()}>
-                      {category.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="categoryName">Категория</Label>
+              <Input
+                id="categoryName"
+                value={formData.categoryName}
+                onChange={(e) => setFormData({ ...formData, categoryName: e.target.value })}
+                placeholder="Электроника"
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="manufacturerId">Производитель *</Label>
-              <Select
-                value={formData.manufacturerId}
-                onValueChange={(value) => setFormData({ ...formData, manufacturerId: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Выберите производителя" />
-                </SelectTrigger>
-                <SelectContent>
-                  {manufacturers.map((manufacturer) => (
-                    <SelectItem key={manufacturer.id} value={manufacturer.id.toString()}>
-                      {manufacturer.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="manufacturerName">Производитель</Label>
+              <Input
+                id="manufacturerName"
+                value={formData.manufacturerName}
+                onChange={(e) => setFormData({ ...formData, manufacturerName: e.target.value })}
+                placeholder="Samsung"
+              />
             </div>
           </div>
 
@@ -207,31 +172,28 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
                 value={formData.priceTypeValue}
                 onChange={(e) => setFormData({ ...formData, priceTypeValue: e.target.value })}
                 required
+                placeholder="89990.00"
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="currencyCode">Валюта</Label>
-              <Select value={formData.currencyCode} onValueChange={(value) => setFormData({ ...formData, currencyCode: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="RUB">RUB</SelectItem>
-                  <SelectItem value="USD">USD</SelectItem>
-                  <SelectItem value="EUR">EUR</SelectItem>
-                </SelectContent>
-              </Select>
+              <Input
+                id="currencyCode"
+                value={formData.currencyCode}
+                onChange={(e) => setFormData({ ...formData, currencyCode: e.target.value })}
+                placeholder="RUB"
+              />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="minStock">Мин. запас</Label>
+              <Label htmlFor="minStock">Мин. остаток</Label>
               <Input
                 id="minStock"
                 type="number"
                 value={formData.minStock}
                 onChange={(e) => setFormData({ ...formData, minStock: e.target.value })}
-                required
+                placeholder="10"
               />
             </div>
           </div>
@@ -242,6 +204,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
               id="description"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Подробное описание товара..."
               rows={3}
             />
           </div>
@@ -258,7 +221,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
                 </>
               ) : (
                 <>
-                  <Icon name="Check" className="mr-2 h-4 w-4" />
+                  <Icon name="Save" className="mr-2 h-4 w-4" />
                   {product ? 'Сохранить' : 'Создать'}
                 </>
               )}

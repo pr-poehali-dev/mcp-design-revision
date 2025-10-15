@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Get products list",
+      "method": "GET",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "products": "array",
+        "total": "number"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
