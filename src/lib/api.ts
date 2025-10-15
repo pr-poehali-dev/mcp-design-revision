@@ -4,6 +4,7 @@ const URLS = {
   auth: func2url.auth,
   products: func2url.products,
   orders: func2url.orders,
+  uploadImage: func2url['upload-image'],
 };
 
 class ApiClient {
@@ -136,6 +137,29 @@ class ApiClient {
       body: JSON.stringify({ action: 'cancel', orderId }),
     });
   }
+
+  async uploadImage(file: File): Promise<{ url: string; id: string }> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        try {
+          const base64 = reader.result as string;
+          const response = await this.request<{ url: string; id: string }>(URLS.uploadImage, {
+            method: 'POST',
+            body: JSON.stringify({ 
+              image: base64,
+              filename: file.name 
+            }),
+          });
+          resolve(response);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
 }
 
 export interface Product {
@@ -143,6 +167,7 @@ export interface Product {
   vendorCode: string;
   name: string;
   description: string;
+  imageUrl?: string;
   priceTypeValue: number;
   currencyCode: string;
   minStock: number;
@@ -176,6 +201,7 @@ export interface CreateProductRequest {
   vendorCode: string;
   name: string;
   description?: string;
+  imageUrl?: string;
   categoryId?: number;
   categoryName?: string;
   manufacturerId?: number;

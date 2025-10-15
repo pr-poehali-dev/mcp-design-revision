@@ -37,6 +37,16 @@ const ProductDetailsDialog = ({ open, onOpenChange, product }: ProductDetailsDia
         </DialogHeader>
 
         <div className="space-y-6">
+          {product.imageUrl && (
+            <div className="flex justify-center">
+              <img
+                src={product.imageUrl}
+                alt={product.name}
+                className="max-h-64 rounded-lg border object-cover"
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-3">
               <div>

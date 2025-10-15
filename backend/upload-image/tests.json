@@ -1,0 +1,18 @@
+{
+  "tests": [
+    {
+      "name": "Upload image",
+      "method": "POST",
+      "body": {
+        "image": "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+        "filename": "test.jpg"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "url": "string",
+        "id": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

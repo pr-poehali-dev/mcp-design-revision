@@ -192,11 +192,34 @@ const Index = () => {
             </div>
           </div>
           <div className="flex-1" />
-          <Button variant="ghost" size="icon">
-            <Icon name="Bell" className="h-5 w-5" />
+          <Button 
+            variant="outline" 
+            size="sm"
+            onClick={() => {
+              const csvProducts = [
+                ['Артикул', 'Название', 'Категория', 'Цена', 'Остаток', 'Статус'].join(','),
+                ...products.map(p => [
+                  p.vendorCode,
+                  `"${p.name}"`,
+                  p.categoryName,
+                  p.priceTypeValue,
+                  p.totalQuantity,
+                  p.isLowStock ? 'Низкий запас' : 'В наличии'
+                ].join(','))
+              ].join('\n');
+              
+              const blob = new Blob(['\ufeff' + csvProducts], { type: 'text/csv;charset=utf-8;' });
+              const link = document.createElement('a');
+              link.href = URL.createObjectURL(blob);
+              link.download = `товары_${new Date().toISOString().split('T')[0]}.csv`;
+              link.click();
+            }}
+          >
+            <Icon name="Download" className="mr-2 h-4 w-4" />
+            Экспорт
           </Button>
           <Button variant="ghost" size="icon">
-            <Icon name="Settings" className="h-5 w-5" />
+            <Icon name="Bell" className="h-5 w-5" />
           </Button>
           <Button variant="ghost" size="icon" onClick={handleLogout}>
             <Icon name="LogOut" className="h-5 w-5" />
@@ -413,7 +436,22 @@ const Index = () => {
                             <td className="p-4 align-middle">
                               <code className="text-xs">{product.vendorCode}</code>
                             </td>
-                            <td className="p-4 align-middle font-medium">{product.name}</td>
+                            <td className="p-4 align-middle">
+                              <div className="flex items-center gap-3">
+                                {product.imageUrl ? (
+                                  <img
+                                    src={product.imageUrl}
+                                    alt={product.name}
+                                    className="h-12 w-12 rounded-md object-cover border"
+                                  />
+                                ) : (
+                                  <div className="h-12 w-12 rounded-md bg-muted flex items-center justify-center border">
+                                    <Icon name="Package" className="h-6 w-6 text-muted-foreground" />
+                                  </div>
+                                )}
+                                <span className="font-medium">{product.name}</span>
+                              </div>
+                            </td>
                             <td className="p-4 align-middle">
                               <Badge variant="outline">{product.categoryName}</Badge>
                             </td>

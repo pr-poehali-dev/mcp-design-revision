@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,9 @@ interface ProductDialogProps {
 
 const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialogProps) => {
   const [loading, setLoading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -28,6 +31,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
     currencyCode: 'RUB',
     minStock: '10',
     description: '',
+    imageUrl: '',
   });
 
   useEffect(() => {
@@ -42,7 +46,9 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
           currencyCode: product.currencyCode,
           minStock: product.minStock.toString(),
           description: product.description || '',
+          imageUrl: product.imageUrl || '',
         });
+        setImagePreview(product.imageUrl || null);
       } else {
         resetForm();
       }
@@ -59,7 +65,52 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
       currencyCode: 'RUB',
       minStock: '10',
       description: '',
+      imageUrl: '',
     });
+    setImagePreview(null);
+  };
+
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: 'destructive',
+        title: 'Неверный формат',
+        description: 'Пожалуйста, выберите изображение',
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: 'destructive',
+        title: 'Файл слишком большой',
+        description: 'Максимальный размер изображения - 5 МБ',
+      });
+      return;
+    }
+
+    setUploadingImage(true);
+
+    try {
+      const response = await api.uploadImage(file);
+      setFormData({ ...formData, imageUrl: response.url });
+      setImagePreview(response.url);
+      toast({
+        title: 'Изображение загружено',
+        description: 'Фото товара успешно загружено',
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка загрузки',
+        description: 'Не удалось загрузить изображение',
+      });
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -76,6 +127,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
         currencyCode: formData.currencyCode,
         minStock: parseInt(formData.minStock),
         description: formData.description,
+        imageUrl: formData.imageUrl,
       };
 
       if (product) {
@@ -107,7 +159,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{product ? 'Редактировать товар' : 'Добавить товар'}</DialogTitle>
           <DialogDescription>
@@ -115,7 +167,65 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="flex gap-6">
+            <div className="flex-shrink-0">
+              <Label>Фотография товара</Label>
+              <div className="mt-2">
+                <div className="relative w-48 h-48 rounded-lg border-2 border-dashed border-muted-foreground/25 overflow-hidden bg-muted/50 hover:bg-muted/70 transition-colors">
+                  {imagePreview ? (
+                    <>
+                      <img
+                        src={imagePreview}
+                        alt="Preview"
+                        className="w-full h-full object-cover"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImagePreview(null);
+                          setFormData({ ...formData, imageUrl: '' });
+                        }}
+                        className="absolute top-2 right-2 p-1.5 bg-destructive text-destructive-foreground rounded-full hover:bg-destructive/90 transition-colors"
+                      >
+                        <Icon name="X" className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingImage}
+                      className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground"
+                    >
+                      {uploadingImage ? (
+                        <>
+                          <Icon name="Loader2" className="h-8 w-8 animate-spin" />
+                          <span className="text-sm">Загрузка...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="ImagePlus" className="h-8 w-8" />
+                          <span className="text-sm">Нажмите для загрузки</span>
+                        </>
+                      )}
+                    </button>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                <p className="mt-2 text-xs text-muted-foreground">
+                  JPG, PNG до 5 МБ
+                </p>
+              </div>
+            </div>
+
+            <div className="flex-1 space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="vendorCode">Артикул *</Label>
@@ -197,6 +307,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
               />
             </div>
           </div>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Описание</Label>
@@ -213,7 +324,7 @@ const ProductDialog = ({ open, onOpenChange, product, onSuccess }: ProductDialog
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Отмена
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || uploadingImage}>
               {loading ? (
                 <>
                   <Icon name="Loader2" className="mr-2 h-4 w-4 animate-spin" />
