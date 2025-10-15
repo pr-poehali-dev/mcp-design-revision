@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Icon from '@/components/ui/icon';
+import { api, Product, Order } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 import {
   LineChart,
   Line,
@@ -18,76 +21,104 @@ import {
   Cell,
 } from 'recharts';
 
-const API_URL = 'https://functions.poehali.dev/4ce8990b-ee12-490c-988b-9989748b64d9';
-
 const COLORS = ['#2563EB', '#F97316', '#10B981', '#8B5CF6', '#6B7280'];
 
 const Index = () => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [stats, setStats] = useState({ total_products: 0, active_orders: 0, active_outlets: 0, recent_write_offs: 0 });
-  const [salesData, setSalesData] = useState([]);
-  const [categoryData, setCategoryData] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
-    fetchDashboardData();
-    fetchProducts();
-    fetchOrders();
+    loadData();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const loadData = async () => {
     try {
-      const response = await fetch(`${API_URL}?action=dashboard`);
-      const data = await response.json();
-      setStats(data.stats);
-      setSalesData(data.salesData);
-      setCategoryData(data.categoryData);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    }
-  };
-
-  const fetchProducts = async () => {
-    try {
-      const response = await fetch(`${API_URL}?action=products&search=${searchQuery}`);
-      const data = await response.json();
-      setProducts(data.products);
+      const [productsData, ordersData] = await Promise.all([
+        api.getProducts({ pageSize: 50 }),
+        api.getOrders({ pageSize: 10 }),
+      ]);
+      
+      setProducts(productsData.products);
+      setOrders(ordersData.orders);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching products:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Ошибка загрузки',
+        description: error instanceof Error ? error.message : 'Не удалось загрузить данные',
+      });
       setLoading(false);
-    }
-  };
-
-  const fetchOrders = async () => {
-    try {
-      const response = await fetch(`${API_URL}?action=orders`);
-      const data = await response.json();
-      setOrders(data.orders);
-    } catch (error) {
-      console.error('Error fetching orders:', error);
     }
   };
 
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
-      fetchProducts();
+      if (!loading) {
+        searchProducts();
+      }
     }, 300);
 
     return () => clearTimeout(delayDebounceFn);
   }, [searchQuery]);
 
-  const getStatusColor = (status: string) => {
-    if (status === 'В наличии') return 'bg-success text-success-foreground';
-    if (status === 'Мало') return 'bg-accent text-accent-foreground';
-    return 'bg-destructive text-destructive-foreground';
+  const searchProducts = async () => {
+    try {
+      const data = await api.getProducts({ search: searchQuery, pageSize: 50 });
+      setProducts(data.products);
+    } catch (error) {
+      console.error('Error searching products:', error);
+    }
   };
 
-  const getOrderTypeColor = (type: string) => {
-    return type === 'incoming' ? 'bg-success/10 text-success' : 'bg-primary/10 text-primary';
+  const handleLogout = () => {
+    api.logout();
+    navigate('/login');
   };
+
+  const getStatusColor = (product: Product) => {
+    if (product.totalQuantity === 0) return 'bg-destructive text-destructive-foreground';
+    if (product.isLowStock) return 'bg-accent text-accent-foreground';
+    return 'bg-success text-success-foreground';
+  };
+
+  const getStatusText = (product: Product) => {
+    if (product.totalQuantity === 0) return 'Нет';
+    if (product.isLowStock) return 'Мало';
+    return 'В наличии';
+  };
+
+  const getOrderStatusColor = (status: string) => {
+    if (status === 'Active') return 'default';
+    if (status === 'Completed') return 'outline';
+    return 'secondary';
+  };
+
+  const getOrderStatusText = (status: string) => {
+    const statusMap: Record<string, string> = {
+      Active: 'Активен',
+      Completed: 'Завершен',
+      Cancelled: 'Отменен',
+    };
+    return statusMap[status] || status;
+  };
+
+  const categoryStats = products.reduce((acc, product) => {
+    const existing = acc.find((item) => item.name === product.categoryName);
+    if (existing) {
+      existing.value++;
+    } else {
+      acc.push({ name: product.categoryName, value: 1 });
+    }
+    return acc;
+  }, [] as { name: string; value: number }[]);
+
+  const totalProducts = products.length;
+  const activeOrders = orders.filter((o) => o.status === 'Active').length;
+  const lowStockProducts = products.filter((p) => p.isLowStock).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -108,6 +139,9 @@ const Index = () => {
           <Button variant="ghost" size="icon">
             <Icon name="Settings" className="h-5 w-5" />
           </Button>
+          <Button variant="ghost" size="icon" onClick={handleLogout}>
+            <Icon name="LogOut" className="h-5 w-5" />
+          </Button>
           <div className="flex items-center gap-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground font-medium">
               А
@@ -124,8 +158,8 @@ const Index = () => {
               <Icon name="Package" className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.total_products}</div>
-              <p className="text-xs text-muted-foreground">В базе данных</p>
+              <div className="text-2xl font-bold">{totalProducts}</div>
+              <p className="text-xs text-muted-foreground">В каталоге</p>
             </CardContent>
           </Card>
 
@@ -135,30 +169,34 @@ const Index = () => {
               <Icon name="ShoppingCart" className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.active_orders}</div>
+              <div className="text-2xl font-bold">{activeOrders}</div>
               <p className="text-xs text-muted-foreground">В обработке</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Торговые точки</CardTitle>
-              <Icon name="Store" className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Низкий запас</CardTitle>
+              <Icon name="AlertCircle" className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.active_outlets}</div>
-              <p className="text-xs text-muted-foreground">Активных</p>
+              <div className="text-2xl font-bold">{lowStockProducts}</div>
+              <p className="text-xs text-destructive">Требует внимания</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Списания</CardTitle>
-              <Icon name="AlertCircle" className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Общий оборот</CardTitle>
+              <Icon name="TrendingUp" className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.recent_write_offs}</div>
-              <p className="text-xs text-destructive">За неделю</p>
+              <div className="text-2xl font-bold">
+                {orders
+                  .reduce((sum, order) => sum + order.totalAmount, 0)
+                  .toLocaleString('ru-RU', { style: 'currency', currency: 'RUB' })}
+              </div>
+              <p className="text-xs text-muted-foreground">Всего</p>
             </CardContent>
           </Card>
         </div>
@@ -166,30 +204,33 @@ const Index = () => {
         <div className="grid gap-6 md:grid-cols-2 mb-6">
           <Card className="animate-scale-in">
             <CardHeader>
-              <CardTitle>Динамика продаж</CardTitle>
-              <CardDescription>Продажи и заказы за последние 6 месяцев</CardDescription>
+              <CardTitle>Распределение по категориям</CardTitle>
+              <CardDescription>Количество товаров по категориям</CardDescription>
             </CardHeader>
-            <CardContent>
-              {salesData.length > 0 ? (
+            <CardContent className="flex items-center justify-center">
+              {categoryStats.length > 0 ? (
                 <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={salesData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(var(--card))',
-                        border: '1px solid hsl(var(--border))',
-                        borderRadius: '8px',
-                      }}
-                    />
-                    <Line type="monotone" dataKey="sales" stroke="hsl(var(--primary))" strokeWidth={2} />
-                    <Line type="monotone" dataKey="orders" stroke="hsl(var(--accent))" strokeWidth={2} />
-                  </LineChart>
+                  <PieChart>
+                    <Pie
+                      data={categoryStats}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, value }) => `${name} (${value})`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {categoryStats.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
                 </ResponsiveContainer>
               ) : (
                 <div className="flex h-[300px] items-center justify-center text-muted-foreground">
-                  Нет данных за последние 6 месяцев
+                  Нет данных
                 </div>
               )}
             </CardContent>
@@ -197,29 +238,37 @@ const Index = () => {
 
           <Card className="animate-scale-in">
             <CardHeader>
-              <CardTitle>Категории товаров</CardTitle>
-              <CardDescription>Распределение по категориям</CardDescription>
+              <CardTitle>Последние заказы</CardTitle>
+              <CardDescription>Недавние операции</CardDescription>
             </CardHeader>
-            <CardContent className="flex items-center justify-center">
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, value }) => `${name} (${value})`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
+            <CardContent>
+              <div className="space-y-3">
+                {orders.slice(0, 5).map((order) => (
+                  <div
+                    key={order.id}
+                    className="flex items-center justify-between rounded-lg border p-3 transition-colors hover:bg-muted/50"
                   >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium">Заказ #{order.id}</p>
+                        <Badge variant={getOrderStatusColor(order.status)}>
+                          {getOrderStatusText(order.status)}
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(order.createdOnUtc).toLocaleDateString('ru-RU')} •{' '}
+                        {order.products.length} позиций
+                      </p>
+                    </div>
+                    <p className="font-semibold">
+                      {order.totalAmount.toLocaleString('ru-RU', {
+                        style: 'currency',
+                        currency: 'RUB',
+                      })}
+                    </p>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -268,7 +317,7 @@ const Index = () => {
               <CardContent>
                 {loading ? (
                   <div className="flex h-48 items-center justify-center">
-                    <p className="text-muted-foreground">Загрузка...</p>
+                    <Icon name="Loader2" className="h-8 w-8 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
                   <div className="rounded-md border">
@@ -276,7 +325,10 @@ const Index = () => {
                       <thead>
                         <tr className="border-b bg-muted/50">
                           <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
-                            Товар
+                            Артикул
+                          </th>
+                          <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                            Название
                           </th>
                           <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
                             Категория
@@ -298,14 +350,22 @@ const Index = () => {
                       <tbody>
                         {products.map((product) => (
                           <tr key={product.id} className="border-b transition-colors hover:bg-muted/50">
+                            <td className="p-4 align-middle">
+                              <code className="text-xs">{product.vendorCode}</code>
+                            </td>
                             <td className="p-4 align-middle font-medium">{product.name}</td>
                             <td className="p-4 align-middle">
-                              <Badge variant="outline">{product.category}</Badge>
+                              <Badge variant="outline">{product.categoryName}</Badge>
                             </td>
-                            <td className="p-4 align-middle">{product.stock} шт.</td>
-                            <td className="p-4 align-middle">{product.price.toLocaleString()} ₽</td>
+                            <td className="p-4 align-middle">{product.totalQuantity} шт.</td>
                             <td className="p-4 align-middle">
-                              <Badge className={getStatusColor(product.status)}>{product.status}</Badge>
+                              {product.priceTypeValue.toLocaleString('ru-RU', {
+                                style: 'currency',
+                                currency: product.currencyCode,
+                              })}
+                            </td>
+                            <td className="p-4 align-middle">
+                              <Badge className={getStatusColor(product)}>{getStatusText(product)}</Badge>
                             </td>
                             <td className="p-4 align-middle">
                               <div className="flex gap-2">
@@ -332,8 +392,8 @@ const Index = () => {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Последние заказы</CardTitle>
-                    <CardDescription>Приходные и расходные операции</CardDescription>
+                    <CardTitle>Все заказы</CardTitle>
+                    <CardDescription>История заказов и операций</CardDescription>
                   </div>
                   <Button>
                     <Icon name="Plus" className="mr-2 h-4 w-4" />
@@ -342,38 +402,69 @@ const Index = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {orders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="flex items-center justify-between rounded-lg border p-4 transition-colors hover:bg-muted/50"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-muted">
-                          <Icon name="FileText" className="h-6 w-6 text-muted-foreground" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-semibold">{order.id_display}</p>
-                            <Badge className={getOrderTypeColor(order.type)}>
-                              {order.type === 'incoming' ? 'Приход' : 'Расход'}
+                <div className="rounded-md border">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          № Заказа
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Дата
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Сотрудник
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Позиций
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Сумма
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Статус
+                        </th>
+                        <th className="h-12 px-4 text-left align-middle font-medium text-muted-foreground">
+                          Действия
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orders.map((order) => (
+                        <tr key={order.id} className="border-b transition-colors hover:bg-muted/50">
+                          <td className="p-4 align-middle font-medium">#{order.id}</td>
+                          <td className="p-4 align-middle">
+                            {new Date(order.createdOnUtc).toLocaleString('ru-RU')}
+                          </td>
+                          <td className="p-4 align-middle">{order.username}</td>
+                          <td className="p-4 align-middle">{order.products.length}</td>
+                          <td className="p-4 align-middle font-semibold">
+                            {order.totalAmount.toLocaleString('ru-RU', {
+                              style: 'currency',
+                              currency: 'RUB',
+                            })}
+                          </td>
+                          <td className="p-4 align-middle">
+                            <Badge variant={getOrderStatusColor(order.status)}>
+                              {getOrderStatusText(order.status)}
                             </Badge>
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {order.outlet} • {order.items} позиций • {order.date}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={order.status === 'Выполнен' ? 'default' : 'secondary'}>
-                          {order.status}
-                        </Badge>
-                        <Button variant="ghost" size="icon">
-                          <Icon name="ChevronRight" className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                          </td>
+                          <td className="p-4 align-middle">
+                            <div className="flex gap-2">
+                              <Button variant="ghost" size="icon">
+                                <Icon name="Eye" className="h-4 w-4" />
+                              </Button>
+                              {order.status === 'Active' && (
+                                <Button variant="ghost" size="icon">
+                                  <Icon name="Check" className="h-4 w-4" />
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
