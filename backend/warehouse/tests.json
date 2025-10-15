@@ -1,0 +1,26 @@
+{
+  "tests": [
+    {
+      "name": "Get dashboard statistics",
+      "method": "GET",
+      "path": "/?action=dashboard",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "stats": "object",
+        "salesData": "array",
+        "categoryData": "array"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Get products list",
+      "method": "GET",
+      "path": "/?action=products",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "products": "array"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
